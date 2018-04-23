@@ -7,11 +7,13 @@ package main
 // You can configure NXdomain overrides for stupid ISPs that intercept and replace unencrypted NXdomain responses with their own bullshit
 
 import (
-	"fmt";
-	"log";
-	"net";
-	"time";
+	"fmt"
+	"log"
+	"net"
+	"time"
 )
+
+//go:generate go run gen/configgen.go
 
 type dnsResp struct {
 	dest net.Addr
@@ -47,6 +49,8 @@ func main() {
 		}
 	}()
 
+	aoeu := configDataDNStool{blar: 10}
+	fmt.Println(aoeu.blar)
 	fmt.Printf("Server up\n")
 
 	for {
