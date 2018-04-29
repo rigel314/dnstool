@@ -16,10 +16,17 @@ import (
 )
 
 type config struct {
+	General genCfg
 	Servers []string
 	Hosts []host
 	Cnames []cname
 	NXoverride []string
+}
+type genCfg struct {
+	BindIP string
+	Port int16
+	TCPalso bool
+	TimeoutMs int
 }
 type host struct {
 	IP string
@@ -36,7 +43,7 @@ type dnsResp struct {
 }
 
 // Defaults
-var cfg = config{Servers: []string{"8.8.8.8", "8.8.4.4"}, Hosts: []host{{IP: "127.0.0.1", Name: "example"}}, Cnames: []cname{{Name: "aoeu", Cname: "example"}}, NXoverride: []string{"example.com"}}
+var cfg = config{General: genCfg{BindIP: "127.0.0.1", Port: 53, TCPalso: false, TimeoutMs: 1000}, Servers: []string{"8.8.8.8", "8.8.4.4"}, Hosts: []host{{IP: "127.0.0.1", Name: "example"}}, Cnames: []cname{{Name: "aoeu", Cname: "example"}}, NXoverride: []string{"example.com"}}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -56,28 +63,33 @@ func main() {
 
 	// fmt.Println(cfg)
 
-	conn, err := net.ListenPacket("udp4", "127.0.0.1:53")
+	// Server
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:53") // TODO: config
 	if(err != nil) {
 		log.Fatal("Couldn't listen on 127.0.0.1:53")
 	}
 	defer conn.Close()
 
+	// channel to hold responses
 	responseCh := make(chan dnsResp)
 	defer func() {
 		close(responseCh)
 	}()
+	// Response sender
 	go func() {
 		for {
+			// wait for response to be generated
 			resp, ok := <- responseCh
-			if(!ok){
-				return
+			if(!ok) {
+				log.Print(err)
+				continue
 			}
 
-			// destAddr := net.Addr(&resp.dest)
+			// Actually send response
 			_, err := conn.WriteTo(resp.data, resp.dest)
 			if(err != nil) {
 				log.Print(err)
-				return;
+				continue
 			}
 		}
 	}()
@@ -85,6 +97,7 @@ func main() {
 	fmt.Printf("Server up\n")
 
 	for {
+		// Create buffer to hold request
 		buf := make([]byte, 1024)
 
 		n, addr, err := conn.ReadFrom(buf)
@@ -93,11 +106,13 @@ func main() {
 			continue
 		}
 
+		// Handle the request
 		go func() {
 			log.Printf("got %d bytes from %s", n, addr)
 
 			// TODO: inspect request and immediatly send CNAME/"hosts file" reply from configuration
 
+			// Forward request to each configured server
 			rconn, err := net.ListenPacket("udp4", "")
 			if(err != nil) {
 				log.Print(err)
@@ -112,6 +127,7 @@ func main() {
 				return
 			}
 
+			// Create buffer to hold response
 			rbuf := make([]byte, 1024)
 
 			rconn.SetReadDeadline(time.Now().Add(time.Second)) // TODO: configurable timeout
@@ -124,6 +140,7 @@ func main() {
 
 			// TODO: parse response for NXdomain override
 
+			// Send response to client
 			resp := dnsResp{dest: addr, data: rbuf[:n]}
 			responseCh <- resp
 		}()

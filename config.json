@@ -1,4 +1,11 @@
 {
+	"General":
+	{
+		"BindIP": "127.0.0.1",
+		"Port": 53,
+		"TCPalso": false,
+		"TimeoutMs": 1000
+	},
 	"Servers":
 	[
 		"8.8.8.8",
