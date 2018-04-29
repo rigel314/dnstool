@@ -11,17 +11,50 @@ import (
 	"log"
 	"net"
 	"time"
+	"os"
+	"encoding/json"
 )
 
-//go:generate go run gen/configgen.go
+type config struct {
+	Servers []string
+	Hosts []host
+	Cnames []cname
+	NXoverride []string
+}
+type host struct {
+	IP string
+	Name string
+}
+type cname struct {
+	Name string
+	Cname string
+}
 
 type dnsResp struct {
 	dest net.Addr
 	data []byte
 }
 
+// Defaults
+var cfg = config{Servers: []string{"8.8.8.8", "8.8.4.4"}, Hosts: []host{{IP: "127.0.0.1", Name: "example"}}, Cnames: []cname{{Name: "aoeu", Cname: "example"}}, NXoverride: []string{"example.com"}}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	// load JSON config
+	cfgfp, err := os.Open("config.json")
+	if(err != nil) {
+		log.Print("config.json failed loading")
+	} else {
+		cfgjs := json.NewDecoder(cfgfp)
+		err = cfgjs.Decode(&cfg)
+		if(err != nil) {
+			log.Print(err)
+			log.Fatal("invalid config")
+		}
+	}
+
+	// fmt.Println(cfg)
 
 	conn, err := net.ListenPacket("udp4", "127.0.0.1:53")
 	if(err != nil) {
@@ -49,8 +82,6 @@ func main() {
 		}
 	}()
 
-	aoeu := configDataDNStool{blar: 10}
-	fmt.Println(aoeu.blar)
 	fmt.Printf("Server up\n")
 
 	for {
