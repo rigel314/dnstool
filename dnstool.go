@@ -75,7 +75,7 @@ func main() {
 	defer func() {
 		close(responseCh)
 	}()
-	// Response sender
+	// Response sender loop
 	go func() {
 		for {
 			// wait for response to be generated
@@ -111,6 +111,11 @@ func main() {
 			log.Printf("got %d bytes from %s", n, addr)
 
 			// TODO: inspect request and immediatly send CNAME/"hosts file" reply from configuration
+			q, ok := parseQuery(buf)
+			if(ok) {
+				log.Print(q.name)
+				return
+			}
 
 			// Forward request to each configured server
 			rconn, err := net.ListenPacket("udp4", "")
