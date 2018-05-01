@@ -13,14 +13,14 @@
 	],
 	"Hosts":
 	[
-		{"IP": "127.0.0.1", "Name": "example"}
+		{"IP": "127.0.0.1", "Name": "example."}
 	],
 	"Cnames":
 	[
-		{"Name": "aoeu", "Cname": "example"}
+		{"Name": "aoeu.", "Cname": "example."}
 	],
 	"NXoverride":
 	[
-		"example.com"
+		"example.com."
 	]
 }

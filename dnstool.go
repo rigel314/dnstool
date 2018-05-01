@@ -114,7 +114,18 @@ func main() {
 			q, ok := parseQuery(buf)
 			if(ok) {
 				log.Print(q.name)
-				return
+				for _, name := range cfg.Cnames {
+					if(name.Name == q.name) {
+						responseCh <- dnsResp{dest: addr, data: genResponse(dnsResponse{id: q.id, name: q.name, cname: name.Cname, a: false})}
+						return
+					}
+				}
+				for _, name := range cfg.Hosts {
+					if(name.Name == q.name) {
+						responseCh <- dnsResp{dest: addr, data: genResponse(dnsResponse{id: q.id, name: q.name, ip: name.IP, a: true})}
+						return
+					}
+				}
 			}
 
 			// Forward request to each configured server

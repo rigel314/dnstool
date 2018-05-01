@@ -1,8 +1,9 @@
 package main
 
 import (
-	// "fmt"
+	"fmt"
 	"encoding/binary"
+	"strings"
 	// "encoding/hex"
 )
 
@@ -11,6 +12,14 @@ const headerSize = 12
 type dnsQuery struct {
 	id uint16
 	name string
+}
+
+type dnsResponse struct {
+	id uint16
+	name string
+	ip string
+	cname string
+	a bool
 }
 
 func parseQuery(bytes []byte) (dnsQuery, bool) {
@@ -42,6 +51,69 @@ func parseQuery(bytes []byte) (dnsQuery, bool) {
 	return qret, true
 }
 
+func genResponse(resp dnsResponse) []byte {
+	ret := []byte{}
+	l := 0
+
+	ret = append(ret, []byte{0,0}...)
+	binary.BigEndian.PutUint16(ret[l:l+2], resp.id)
+	l += 2
+
+	ret = append(ret, []byte{0,0}...)
+	binary.BigEndian.PutUint16(ret[l:l+2], 1<<15 | 1<<10 | 1<<7)
+	l += 2
+
+	ret = append(ret, []byte{0,0}...)
+	binary.BigEndian.PutUint16(ret[l:l+2], 0)
+	l += 2
+
+	ret = append(ret, []byte{0,0}...)
+	binary.BigEndian.PutUint16(ret[l:l+2], 1)
+	l += 2
+
+	ret = append(ret, []byte{0,0}...)
+	binary.BigEndian.PutUint16(ret[l:l+2], 0)
+	l += 2
+
+	ret = append(ret, []byte{0,0}...)
+	binary.BigEndian.PutUint16(ret[l:l+2], 0)
+	l += 2
+
+	ret = append(ret, name2bytes(resp.name)...)
+	l = len(ret)
+
+	ret = append(ret, []byte{0,0}...)
+	if(!resp.a) { // CNAME response
+		binary.BigEndian.PutUint16(ret[l:l+2], 5)
+	} else { // A response
+		binary.BigEndian.PutUint16(ret[l:l+2], 1)
+	}
+	l += 2
+
+	ret = append(ret, []byte{0,0}...)
+	binary.BigEndian.PutUint16(ret[l:l+2], 1)
+	l += 2
+
+	ret = append(ret, []byte{0,0,0,0}...)
+	binary.BigEndian.PutUint32(ret[l:l+4], 300)
+	l += 2
+
+	ret = append(ret, []byte{0,0}...)
+	if(!resp.a) { // CNAME response
+		b := name2bytes(resp.cname)
+		binary.BigEndian.PutUint16(ret[l:l+2], uint16(len(b)))
+		ret = append(ret, b...)
+	} else { // A response
+		binary.BigEndian.PutUint16(ret[l:l+2], 4)
+		ret = append(ret, []byte{0,0,0,0}...)
+		var a, b, c, d uint8
+		fmt.Sscanf(resp.ip, "%d.%d.%d.%d", a, b, c, d)
+		ret = append(ret, a, b, c, d)
+	}
+
+	return ret
+}
+
 func bytes2name(bytes []byte) (string, bool) {
 	ret := ""
 	l := -1
@@ -63,4 +135,15 @@ func bytes2name(bytes []byte) (string, bool) {
 		bytes = bytes[1+l:]
 	}
 	return ret, true
+}
+
+func name2bytes(name string) []byte {
+	ret := []byte{}
+
+	for _, s := range strings.Split(name, ".") {
+		ret = append(ret, byte(len(s)))
+		ret = append(ret, []byte(s)...)
+	}
+
+	return ret
 }
