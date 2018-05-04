@@ -55,33 +55,41 @@ func genResponse(resp dnsResponse) []byte {
 	ret := []byte{}
 	l := 0
 
+	// response ID
 	ret = append(ret, []byte{0,0}...)
 	binary.BigEndian.PutUint16(ret[l:l+2], resp.id)
 	l += 2
 
+	// Flags
 	ret = append(ret, []byte{0,0}...)
 	binary.BigEndian.PutUint16(ret[l:l+2], 1<<15 | 1<<10 | 1<<7)
 	l += 2
 
+	// # questions
 	ret = append(ret, []byte{0,0}...)
 	binary.BigEndian.PutUint16(ret[l:l+2], 0)
 	l += 2
 
+	// # answers
 	ret = append(ret, []byte{0,0}...)
 	binary.BigEndian.PutUint16(ret[l:l+2], 1)
 	l += 2
 
+	// # name servers
 	ret = append(ret, []byte{0,0}...)
 	binary.BigEndian.PutUint16(ret[l:l+2], 0)
 	l += 2
 
+	// # additional
 	ret = append(ret, []byte{0,0}...)
 	binary.BigEndian.PutUint16(ret[l:l+2], 0)
 	l += 2
 
+	// RR name
 	ret = append(ret, name2bytes(resp.name)...)
 	l = len(ret)
 
+	// RR type
 	ret = append(ret, []byte{0,0}...)
 	if(!resp.a) { // CNAME response
 		binary.BigEndian.PutUint16(ret[l:l+2], 5)
@@ -90,14 +98,17 @@ func genResponse(resp dnsResponse) []byte {
 	}
 	l += 2
 
+	// RR CLASS
 	ret = append(ret, []byte{0,0}...)
 	binary.BigEndian.PutUint16(ret[l:l+2], 1)
 	l += 2
 
+	// RR TTL
 	ret = append(ret, []byte{0,0,0,0}...)
 	binary.BigEndian.PutUint32(ret[l:l+4], 300)
-	l += 2
+	l += 4
 
+	// RR RDLEN + RDDATA
 	ret = append(ret, []byte{0,0}...)
 	if(!resp.a) { // CNAME response
 		b := name2bytes(resp.cname)
@@ -105,9 +116,10 @@ func genResponse(resp dnsResponse) []byte {
 		ret = append(ret, b...)
 	} else { // A response
 		binary.BigEndian.PutUint16(ret[l:l+2], 4)
-		ret = append(ret, []byte{0,0,0,0}...)
+		// ret = append(ret, []byte{0,0,0,0}...)
 		var a, b, c, d uint8
-		fmt.Sscanf(resp.ip, "%d.%d.%d.%d", a, b, c, d)
+		fmt.Sscanf(resp.ip, "%d.%d.%d.%d", &a, &b, &c, &d)
+
 		ret = append(ret, a, b, c, d)
 	}
 
