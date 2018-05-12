@@ -12,6 +12,7 @@ const headerSize = 12
 type dnsQuery struct {
 	id uint16
 	name string
+	qtype uint16
 }
 
 type dnsResponse struct {
@@ -67,7 +68,7 @@ func genResponse(resp dnsResponse) []byte {
 
 	// # questions
 	ret = append(ret, []byte{0,0}...)
-	binary.BigEndian.PutUint16(ret[l:l+2], 0)
+	binary.BigEndian.PutUint16(ret[l:l+2], 1)
 	l += 2
 
 	// # answers
@@ -85,6 +86,22 @@ func genResponse(resp dnsResponse) []byte {
 	binary.BigEndian.PutUint16(ret[l:l+2], 0)
 	l += 2
 
+	// Questions
+	// Q name
+	ret = append(ret, name2bytes(resp.name)...)
+	l = len(ret)
+
+	// Qtype
+	ret = append(ret, []byte{0,0}...)
+	binary.BigEndian.PutUint16(ret[l:l+2], 1) // A record
+	l += 2
+
+	// Qclass
+	ret = append(ret, []byte{0,0}...)
+	binary.BigEndian.PutUint16(ret[l:l+2], 1) // IN class
+	l += 2
+
+	// Answers
 	// RR name
 	ret = append(ret, name2bytes(resp.name)...)
 	l = len(ret)

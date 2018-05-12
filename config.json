@@ -2,10 +2,21 @@
 	"General":
 	{
 		"BindIP": "127.0.0.1",
-		"Port": 53,
-		"TCPalso": false,
+		"DNSPort": 53,
+		"DNSTCPalso": false,
 		"TimeoutMs": 1000
 	},
+	"ReverseProxies":
+	[
+		{
+			"Names":
+			["example"],
+			"Dest": "example.com",
+			"DestPort": 80
+		}
+	],
+	"HTTPlistenPorts":
+	[80],
 	"Servers":
 	[
 		"8.8.8.8",
@@ -18,6 +29,10 @@
 	"Cnames":
 	[
 		{"Name": "aoeu.", "Cname": "example."}
+	],
+	"Redirect301s":
+	[
+		{"From": "example", "To": "google.com"}
 	],
 	"NXoverride":
 	[

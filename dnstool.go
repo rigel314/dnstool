@@ -12,20 +12,25 @@ import (
 	"net"
 	"time"
 	"os"
+	"io"
+	// "strings"
+	"net/http"
 	"encoding/json"
 )
 
 type config struct {
 	General genCfg
+	HTTPlistenPorts []uint16
 	Servers []string
 	Hosts []host
 	Cnames []cname
+	Redirect301s []redirect
 	NXoverride []string
 }
 type genCfg struct {
 	BindIP string
-	Port int16
-	TCPalso bool
+	DNSPort int16
+	DNSTCPalso bool
 	TimeoutMs int
 }
 type host struct {
@@ -36,6 +41,10 @@ type cname struct {
 	Name string
 	Cname string
 }
+type redirect struct {
+	From string
+	To string
+}
 
 type dnsResp struct {
 	dest net.Addr
@@ -43,7 +52,7 @@ type dnsResp struct {
 }
 
 // Defaults
-var cfg = config{General: genCfg{BindIP: "127.0.0.1", Port: 53, TCPalso: false, TimeoutMs: 1000}, Servers: []string{"8.8.8.8", "8.8.4.4"}, Hosts: []host{{IP: "127.0.0.1", Name: "example"}}, Cnames: []cname{{Name: "aoeu", Cname: "example"}}, NXoverride: []string{"example.com"}}
+var cfg = config{General: genCfg{BindIP: "127.0.0.1", DNSPort: 53, DNSTCPalso: false, TimeoutMs: 1000}, Servers: []string{"8.8.8.8", "8.8.4.4"}, Hosts: []host{{IP: "127.0.0.1", Name: "example"}}, Cnames: []cname{{Name: "aoeu", Cname: "example"}}, NXoverride: []string{"example.com"}}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -92,6 +101,11 @@ func main() {
 				continue
 			}
 		}
+	}()
+
+	go func() {
+		http.HandleFunc("/", redirector)
+		http.ListenAndServe("127.0.0.1:80", nil)
 	}()
 
 	fmt.Printf("Server up\n")
@@ -161,4 +175,19 @@ func main() {
 			responseCh <- resp
 		}()
 	}
+}
+
+func redirector(w http.ResponseWriter, req *http.Request) {
+	dest := req.Host + req.URL.String()
+	log.Println(req.Host)
+	for _, name := range cfg.Redirect301s {
+		if(name.From == req.Host) {
+			newdest := "http://" + name.To + req.URL.String()
+			log.Printf("redirecting %s=>%s\n", dest, newdest)
+			http.Redirect(w, req, newdest, http.StatusMovedPermanently)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNotFound)
+	io.WriteString(w, fmt.Sprintf("no redirect or reverse proxy config for %s\n", req.Host))
 }
