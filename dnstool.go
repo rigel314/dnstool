@@ -13,7 +13,6 @@ import (
 	"time"
 	"os"
 	"io"
-	"reflect"
 	"runtime"
 	// "strings"
 	"net/http"
@@ -34,6 +33,7 @@ type genCfg struct {
 	DNSPort int16
 	DNSTCPalso bool
 	TimeoutMs int
+	ShowStats bool
 }
 type host struct {
 	IP string
@@ -48,13 +48,20 @@ type redirect struct {
 	To string
 }
 
+type statistics struct {
+	ServerHits []int
+}
+
 type dnsResp struct {
 	dest net.Addr
 	data []byte
+	idx int
 }
 
 // Defaults
 var cfg = config{General: genCfg{BindIP: "127.0.0.1", DNSPort: 53, DNSTCPalso: false, TimeoutMs: 1000}, Servers: []string{"8.8.8.8", "8.8.4.4"}, Hosts: []host{{IP: "127.0.0.1", Name: "example"}}, Cnames: []cname{{Name: "aoeu", Cname: "example"}}, NXoverride: []string{"example.com"}}
+
+var stats statistics
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -73,6 +80,8 @@ func main() {
 			log.Fatal("invalid config")
 		}
 	}
+
+	stats.ServerHits = make([]int, len(cfg.Servers))
 
 	// fmt.Println(cfg)
 
@@ -135,7 +144,7 @@ func main() {
 			// TODO: inspect request and immediatly send CNAME/"hosts file" reply from configuration
 			q, ok := parseQuery(buf)
 			if(ok) {
-				log.Print(q.name)
+				// log.Print(q.name)
 				for _, name := range cfg.Cnames {
 					if(name.Name == q.name) {
 						// TODO: make CNAME replies also provide an A answer
@@ -151,42 +160,38 @@ func main() {
 				}
 			}
 
-			// Forward request to each configured server
-			rconn, err := net.ListenPacket("udp4", "")
-			if(err != nil) {
-				log.Print(err)
-				return
-			}
-			defer rconn.Close()
-
-			var fwChans []chan dnsResp
-			for i := 0; i < len(cfg.Servers); i++ {
-				ch := make(chan dnsResp)
-				fwChans = append(fwChans, ch)
-			}
-
-			cases := make([]reflect.SelectCase, len(cfg.Servers)+1)
-			for i, ch := range fwChans {
-				cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
-			}
-			cases[len(cfg.Servers)] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(time.Duration(cfg.General.TimeoutMs) * time.Millisecond))}
-
-			syncCh := make(chan int)
+			fwChan := make(chan dnsResp)
 
 			go func() {
-				i, resp, ok := reflect.Select(cases)
-				if(ok && i < len(cfg.Servers)) {
-					log.Printf("using dns from server %d\n", i)
-					responseCh<- resp.Interface().(dnsResp)
-				} else {
-					log.Println("timout")
+				select{
+					case val, ok := <-fwChan:
+						if(ok) {
+							// log.Printf("using dns from server %d\n", val.idx)
+							responseCh<- val
+							stats.ServerHits[val.idx]++
+							if(cfg.General.ShowStats && sumSlice(stats.ServerHits) % 100 == 0) {
+								log.Printf("DNS breakdown:\n")
+								log.Printf("\t#responses\tserver\n")
+								for i, v := range stats.ServerHits {
+									log.Printf("\t% 10d\t%s", v, cfg.Servers[i])
+								}
+							}
+						}
+					case <-time.After(time.Duration(cfg.General.TimeoutMs) * time.Millisecond):
+						log.Println("timout")
 				}
-				syncCh<- 0
 			}()
 
 			for idx, srv := range cfg.Servers {
-				go func(idx int, srv string, rconn net.PacketConn) {
-					log.Printf("%d, %s", idx, srv)
+				// Forward request to each configured server
+				go func(idx int, srv string) {
+					rconn, err := net.ListenPacket("udp4", "")
+					if(err != nil) {
+						log.Print(err)
+						return
+					}
+					defer rconn.Close()
+
 					remoteAddr := net.UDPAddr{IP: net.ParseIP(srv), Port: 53}
 					_, err = rconn.WriteTo(buf[:n], net.Addr(&remoteAddr))
 					if(err != nil) {
@@ -200,6 +205,7 @@ func main() {
 					rconn.SetReadDeadline(time.Now().Add(time.Duration(cfg.General.TimeoutMs) * time.Millisecond))
 					n, _, err := rconn.ReadFrom(rbuf)
 					if(err != nil) {
+						log.Printf("err forwarding to %s", srv)
 						// TODO: actually, send an NXdomain on timeout
 						log.Print(err)
 						return
@@ -208,22 +214,17 @@ func main() {
 					// TODO: parse response for NXdomain override
 
 					// Send response to client
-					resp := dnsResp{dest: addr, data: rbuf[:n]}
+					sm_rbuf := make([]byte, n)
+					copy(sm_rbuf, rbuf[:n])
+					resp := dnsResp{dest: addr, data: sm_rbuf, idx: idx}
 
 					select {
-						case fwChans[idx]<- resp:
+						case fwChan<- resp:
 						default:
 							// log.Printf("chan %d not ready\n", idx)
 					}
-					syncCh<- 0
-				}(idx, srv, rconn)
+				}(idx, srv)
 			}
-
-			for i := 0; i < len(cfg.Servers); i++ {
-				<-syncCh // wait for each request goroutine in loop above
-			}
-
-			<-syncCh // wait for send-response or timeout
 		}(addr, buf)
 	}
 }
@@ -241,4 +242,13 @@ func redirector(w http.ResponseWriter, req *http.Request) {
 	}
 	w.WriteHeader(http.StatusNotFound)
 	io.WriteString(w, fmt.Sprintf("no redirect or reverse proxy config for %s\n", req.Host))
+}
+
+func sumSlice(s []int) int {
+	var sum int = 0
+	for _, v := range s {
+		sum += v
+	}
+
+	return sum
 }

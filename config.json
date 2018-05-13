@@ -4,7 +4,8 @@
 		"BindIP": "127.0.0.1",
 		"DNSPort": 53,
 		"DNSTCPalso": false,
-		"TimeoutMs": 1000
+		"TimeoutMs": 1000,
+		"ShowStats": true
 	},
 	"ReverseProxies":
 	[
@@ -20,9 +21,8 @@
 	"Servers":
 	[
 		"1.1.1.1",
-		"8.8.4.4",
 		"8.8.8.8",
-		"60.120.80.8"
+		"8.8.4.4"
 	],
 	"Hosts":
 	[
