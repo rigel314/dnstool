@@ -14,7 +14,7 @@ build:
       - dnstool.darwin.*
   script:
     - GOOS=linux GOARCH=amd64 go build -o dnstool.linux.amd64 -ldflags "-X main.GIT_VER=$(git rev-parse HEAD) -w -s" *.go
-    - GOOS=linux GOARCH=368 go build -o dnstool.linux.386 -ldflags "-X main.GIT_VER=$(git rev-parse HEAD) -w -s" *.go
+    - GOOS=linux GOARCH=386 go build -o dnstool.linux.386 -ldflags "-X main.GIT_VER=$(git rev-parse HEAD) -w -s" *.go
     - GOOS=windows GOARCH=amd64 go build -o dnstool.windows.amd64 -ldflags "-X main.GIT_VER=$(git rev-parse HEAD) -w -s" *.go
     - GOOS=windows GOARCH=386 go build -o dnstool.windows.386 -ldflags "-X main.GIT_VER=$(git rev-parse HEAD) -w -s" *.go
     - GOOS=darwin GOARCH=amd64 go build -o dnstool.darwin.amd64 -ldflags "-X main.GIT_VER=$(git rev-parse HEAD) -w -s" *.go
