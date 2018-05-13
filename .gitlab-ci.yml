@@ -1,0 +1,13 @@
+stages:
+  - build
+
+build:
+  stage: build
+  tags:
+    - linux
+    - docker
+  image: golang
+  artifacts:
+    -dnstool.linux.amd64
+  script:
+    - GOOS=linux GOARCH=amd64 go build -o dnstool.linux.amd64 -ldflags "-X main.GIT_VER=$(git rev-parse HEAD --verify) -w -s" *.go

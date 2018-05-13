@@ -65,6 +65,8 @@ var cfg config
 
 var stats statistics
 
+var GIT_VER string = "Uncontrolled"
+
 func main() {
 	// Print line numbers
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
