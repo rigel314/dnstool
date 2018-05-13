@@ -14,6 +14,7 @@ import (
 	"os"
 	"io"
 	"runtime"
+	"bytes"
 	// "strings"
 	"net/http"
 	"encoding/json"
@@ -59,7 +60,8 @@ type dnsResp struct {
 }
 
 // Defaults
-var cfg = config{General: genCfg{BindIP: "127.0.0.1", DNSPort: 53, DNSTCPalso: false, TimeoutMs: 1000}, Servers: []string{"8.8.8.8", "8.8.4.4"}, Hosts: []host{{IP: "127.0.0.1", Name: "example"}}, Cnames: []cname{{Name: "aoeu", Cname: "example"}}, NXoverride: []string{"example.com"}}
+//go:generate go run gen/defaults.go
+var cfg config
 
 var stats statistics
 
@@ -69,6 +71,11 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	// load JSON config
+	err := json.Unmarshal(defaultjs, &cfg)
+	if(err != nil) {
+		log.Println(err)
+		log.Fatal("hard coded defaults caused error")
+	}
 	cfgfp, err := os.Open("config.json")
 	if(err != nil) {
 		log.Print("config.json failed loading, using defaults")
@@ -78,6 +85,13 @@ func main() {
 		if(err != nil) {
 			log.Print(err)
 			log.Fatal("invalid config")
+		}
+	}
+
+	servfilt := cfg.Servers[:0]
+	for _, serv := range cfg.Servers {
+		if(bytes.Compare(net.ParseIP(serv), net.IPv4(127, 0, 0, 1)) != 0) {
+			servfilt = append(servfilt, serv)
 		}
 	}
 
