@@ -13,6 +13,8 @@ import (
 	"time"
 	"os"
 	"io"
+	"reflect"
+	"runtime"
 	// "strings"
 	"net/http"
 	"encoding/json"
@@ -57,10 +59,12 @@ var cfg = config{General: genCfg{BindIP: "127.0.0.1", DNSPort: 53, DNSTCPalso: f
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	// load JSON config
 	cfgfp, err := os.Open("config.json")
 	if(err != nil) {
-		log.Print("config.json failed loading")
+		log.Print("config.json failed loading, using defaults")
 	} else {
 		cfgjs := json.NewDecoder(cfgfp)
 		err = cfgjs.Decode(&cfg)
@@ -104,8 +108,12 @@ func main() {
 	}()
 
 	go func() {
+		// TODO: check errors
 		http.HandleFunc("/", redirector)
-		http.ListenAndServe("127.0.0.1:80", nil)
+		err := http.ListenAndServe("127.0.0.1:80", nil)
+		if(err != nil) {
+			log.Fatal(err)
+		}
 	}()
 
 	fmt.Printf("Server up\n")
@@ -121,8 +129,8 @@ func main() {
 		}
 
 		// Handle the request
-		go func() {
-			log.Printf("got %d bytes from %s", n, addr)
+		go func(addr net.Addr, buf []byte) {
+			// log.Printf("got %d bytes from %s", n, addr)
 
 			// TODO: inspect request and immediatly send CNAME/"hosts file" reply from configuration
 			q, ok := parseQuery(buf)
@@ -130,6 +138,7 @@ func main() {
 				log.Print(q.name)
 				for _, name := range cfg.Cnames {
 					if(name.Name == q.name) {
+						// TODO: make CNAME replies also provide an A answer
 						responseCh <- dnsResp{dest: addr, data: genResponse(dnsResponse{id: q.id, name: q.name, cname: name.Cname, a: false})}
 						return
 					}
@@ -150,30 +159,72 @@ func main() {
 			}
 			defer rconn.Close()
 
-			remoteAddr := net.UDPAddr{IP: net.IPv4(8, 8, 8, 8), Port: 53} // TOOD: configurable dns forwarding (a list)
-			_, err = rconn.WriteTo(buf[:n], net.Addr(&remoteAddr))
-			if(err != nil) {
-				log.Print(err)
-				return
+			var fwChans []chan dnsResp
+			for i := 0; i < len(cfg.Servers); i++ {
+				ch := make(chan dnsResp)
+				fwChans = append(fwChans, ch)
 			}
 
-			// Create buffer to hold response
-			rbuf := make([]byte, 1024)
+			cases := make([]reflect.SelectCase, len(cfg.Servers)+1)
+			for i, ch := range fwChans {
+				cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
+			}
+			cases[len(cfg.Servers)] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(time.Duration(cfg.General.TimeoutMs) * time.Millisecond))}
 
-			rconn.SetReadDeadline(time.Now().Add(time.Second)) // TODO: configurable timeout
-			n, _, err := rconn.ReadFrom(rbuf)
-			if(err != nil) {
-				// TODO: actually, send an NXdomain on timeout
-				log.Print(err)
-				return
+			syncCh := make(chan int)
+
+			go func() {
+				i, resp, ok := reflect.Select(cases)
+				if(ok && i < len(cfg.Servers)) {
+					log.Printf("using dns from server %d\n", i)
+					responseCh<- resp.Interface().(dnsResp)
+				} else {
+					log.Println("timout")
+				}
+				syncCh<- 0
+			}()
+
+			for idx, srv := range cfg.Servers {
+				go func(idx int, srv string, rconn net.PacketConn) {
+					log.Printf("%d, %s", idx, srv)
+					remoteAddr := net.UDPAddr{IP: net.ParseIP(srv), Port: 53}
+					_, err = rconn.WriteTo(buf[:n], net.Addr(&remoteAddr))
+					if(err != nil) {
+						log.Print(err)
+						return
+					}
+
+					// Create buffer to hold response
+					rbuf := make([]byte, 1024)
+
+					rconn.SetReadDeadline(time.Now().Add(time.Duration(cfg.General.TimeoutMs) * time.Millisecond))
+					n, _, err := rconn.ReadFrom(rbuf)
+					if(err != nil) {
+						// TODO: actually, send an NXdomain on timeout
+						log.Print(err)
+						return
+					}
+
+					// TODO: parse response for NXdomain override
+
+					// Send response to client
+					resp := dnsResp{dest: addr, data: rbuf[:n]}
+
+					select {
+						case fwChans[idx]<- resp:
+						default:
+							// log.Printf("chan %d not ready\n", idx)
+					}
+					syncCh<- 0
+				}(idx, srv, rconn)
 			}
 
-			// TODO: parse response for NXdomain override
+			for i := 0; i < len(cfg.Servers); i++ {
+				<-syncCh // wait for each request goroutine in loop above
+			}
 
-			// Send response to client
-			resp := dnsResp{dest: addr, data: rbuf[:n]}
-			responseCh <- resp
-		}()
+			<-syncCh // wait for send-response or timeout
+		}(addr, buf)
 	}
 }
 
