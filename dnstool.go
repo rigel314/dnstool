@@ -71,6 +71,8 @@ func main() {
 	// Print line numbers
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
+	log.Println("GIT_VER: " + GIT_VER)
+
 	// Use all cores if you have to
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
