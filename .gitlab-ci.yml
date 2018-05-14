@@ -18,8 +18,8 @@ build:
     - ver=`git rev-parse HEAD`
     - GOOS=linux GOARCH=amd64 go build -o dnstool.linux.amd64 -ldflags "-X main.GIT_VER=$ver -w -s" *.go
     - GOOS=linux GOARCH=386 go build -o dnstool.linux.386 -ldflags "-X main.GIT_VER=$ver -w -s" *.go
-    - GOOS=windows GOARCH=amd64 go build -o dnstool.windows.amd64 -ldflags "-X main.GIT_VER=$ver -w -s" *.go
-    - GOOS=windows GOARCH=386 go build -o dnstool.windows.386 -ldflags "-X main.GIT_VER=$ver -w -s" *.go
+    - GOOS=windows GOARCH=amd64 go build -o dnstool.windows.amd64.exe -ldflags "-X main.GIT_VER=$ver -w -s" *.go
+    - GOOS=windows GOARCH=386 go build -o dnstool.windows.386.exe -ldflags "-X main.GIT_VER=$ver -w -s" *.go
     - GOOS=darwin GOARCH=amd64 go build -o dnstool.darwin.amd64 -ldflags "-X main.GIT_VER=$ver -w -s" *.go
 
 pages:
@@ -40,4 +40,4 @@ pages:
     - mkdir dnstool
     - cp dnstool.linux.* dnstool.windows.* dnstool.darwin.* config.json dnstool
     - tar czvf public/dnstool.tgz dnstool
-    - echo '<!DOCTYPE html><html><head><title>dnstool</title></head><body><h1>Latest dnstool downloads</h1><h2>Take control of your DNS</h2><a href="dnstool.tgz">dnstool.tgz</a><h2>Older versions:</h2><a href="https://gitlab.com/rigel314/dnstool/pipelines?scope=tags"></a></body></html>' > public/index.html
+    - echo '<!DOCTYPE html><html><head><title>dnstool</title></head><body><h1>Take control of your DNS</h1><h2>Latest dnstool downloads</h2><a href="dnstool.tgz">dnstool.tgz</a><h2>Older versions:</h2><a href="https://gitlab.com/rigel314/dnstool/pipelines?scope=tags">tags</a></body></html>' > public/index.html
