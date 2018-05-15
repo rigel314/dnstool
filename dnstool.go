@@ -15,7 +15,7 @@ import (
 	"io"
 	"runtime"
 	"bytes"
-	// "strings"
+	"strings"
 	"net/http"
 	"encoding/json"
 )
@@ -168,14 +168,14 @@ func main() {
 			if(ok) {
 				// log.Print(q.name)
 				for _, name := range cfg.Cnames {
-					if(name.Name == q.name) {
+					if(strings.EqualFold(name.Name, q.name)) {
 						// TODO: make CNAME replies also provide an A answer
 						responseCh <- dnsResp{dest: addr, data: genResponse(dnsResponse{id: q.id, name: q.name, cname: name.Cname, a: false})}
 						return
 					}
 				}
 				for _, name := range cfg.Hosts {
-					if(name.Name == q.name) {
+					if(strings.EqualFold(name.Name, q.name)) {
 						responseCh <- dnsResp{dest: addr, data: genResponse(dnsResponse{id: q.id, name: q.name, ip: name.IP, a: true})}
 						return
 					}
@@ -263,7 +263,7 @@ func redirector(w http.ResponseWriter, req *http.Request) {
 	dest := req.Host + req.URL.String()
 	log.Println(req.Host)
 	for _, name := range cfg.Redirect301s {
-		if(name.From == req.Host) {
+		if(strings.EqualFold(name.From, req.Host)) {
 			newdest := "http://" + name.To + req.URL.String()
 			log.Printf("redirecting %s=>%s\n", dest, newdest)
 			http.Redirect(w, req, newdest, http.StatusMovedPermanently)
