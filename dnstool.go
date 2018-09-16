@@ -9,17 +9,21 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"github.com/kardianos/service"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"runtime"
 	"strings"
 	"time"
 )
 
+// config
 type config struct {
 	General         genCfg
 	HTTPlistenPorts []uint16
@@ -59,6 +63,24 @@ type dnsResp struct {
 	idx  int
 }
 
+// service stuff
+var logger service.Logger
+
+type program struct{}
+
+func (p *program) Start(s service.Service) error {
+	// Start should not block. Do the actual work async.
+	go p.run()
+	return nil
+}
+func (p *program) run() {
+	dnstool()
+}
+func (p *program) Stop(s service.Service) error {
+	// Stop should not block. Return with a few seconds.
+	return nil
+}
+
 // Defaults
 //go:generate go run gen/defaults.go
 var cfg config
@@ -73,6 +95,80 @@ func main() {
 
 	log.Println("GIT_VER: " + GIT_VER)
 
+	var svcInstall bool
+	var svcUninstall bool
+	var svcRestart bool
+	var svcStart bool
+	var svcStop bool
+	flag.BoolVar(&svcInstall, "install", false, "installs dnstool as a service")
+	flag.BoolVar(&svcUninstall, "uninstall", false, "uninstalls dnstool service")
+	flag.BoolVar(&svcRestart, "restart", false, "restarts dnstool service")
+	flag.BoolVar(&svcStart, "start", false, "starts dnstool service")
+	flag.BoolVar(&svcStop, "stop", false, "stops dnstool service")
+	flag.Parse()
+
+	svcConfig := &service.Config{
+		Name:        "DNStool",
+		DisplayName: "DNStool",
+		Description: "Does a little DNS magic",
+	}
+
+	prg := &program{}
+	s, err := service.New(prg, svcConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	logger, err = s.Logger(nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if !(svcInstall || svcUninstall || svcRestart || svcStart || svcStop) {
+		err = s.Run()
+		if err != nil {
+			logger.Error(err)
+		}
+		return
+	}
+	if svcInstall {
+		err := s.Install()
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if svcUninstall {
+		err := s.Uninstall()
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if svcRestart {
+		err := s.Restart()
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if svcStart {
+		err := s.Start()
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if svcStop {
+		err := s.Stop()
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+}
+
+func dnstool() {
 	// Use all cores if you have to
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -82,8 +178,19 @@ func main() {
 		log.Println(err)
 		log.Fatal("hard coded defaults caused error")
 	}
+
+	// load path to json file
+	exe, err := os.Executable()
+	if err != nil {
+		logger.Error(err)
+	}
+	exe = strings.Replace(exe, "\\", "/", -1)
+	exedir := path.Dir(exe)
+	jsonpath := path.Join(exedir, "config.json")
+
 	// load JSON config
-	cfgfp, err := os.Open("config.json")
+	logger.Infof("Loading Config: %s", jsonpath)
+	cfgfp, err := os.Open(jsonpath)
 	if err != nil {
 		log.Print("config.json failed loading, using defaults")
 	} else {
@@ -115,7 +222,7 @@ func main() {
 	bindstr := fmt.Sprintf("%s:%d", cfg.General.BindIP, cfg.General.DNSPort)
 	conn, err := net.ListenPacket("udp4", bindstr)
 	if err != nil {
-		log.Fatal("Couldn't listen on" + bindstr)
+		log.Fatal("Couldn't listen on " + bindstr)
 	}
 	defer conn.Close()
 
