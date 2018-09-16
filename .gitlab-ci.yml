@@ -7,7 +7,7 @@ build:
   tags:
     - linux
     - docker
-  image: golang
+  image: golang:1.10
   artifacts:
     paths:
       - dnstool.linux.*
@@ -15,6 +15,7 @@ build:
       - dnstool.darwin.*
       - config.json
   script:
+    - go get
     - ver=`git rev-parse HEAD`
     - GOOS=linux GOARCH=amd64 go build -o dnstool.linux.amd64 -ldflags "-X main.GIT_VER=$ver -w -s" *.go
     - GOOS=linux GOARCH=386 go build -o dnstool.linux.386 -ldflags "-X main.GIT_VER=$ver -w -s" *.go
