@@ -202,14 +202,21 @@ func dnstool() {
 		}
 	}
 
+	// complain about not-yet-supported config options
 	if cfg.General.DNSTCPalso {
 		log.Println("ignoring unsupported config: DNSTCPalso = true")
 	}
+	if len(cfg.NXoverride) != 0 {
+		log.Println("ignoring unsupported config: NXoverride")
+	}
+	if len(cfg.ReverseProxies) != 0 {
+		log.Println("ignoring unsupported config: ReverseProxies")
+	}
 
-	// filter out 127.0.0.1's from Server list
+	// filter out BindIP's from Server list
 	servfilt := cfg.Servers[:0]
 	for _, serv := range cfg.Servers {
-		if bytes.Compare(net.ParseIP(serv), net.IPv4(127, 0, 0, 1)) != 0 {
+		if bytes.Compare(net.ParseIP(serv), net.ParseIP(cfg.General.BindIP)) != 0 {
 			servfilt = append(servfilt, serv)
 		}
 	}
